@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+# local state — don't commit your personal error book / coverage
+errors.json
+syntax_topics.json
