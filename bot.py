@@ -50,53 +50,44 @@ client = AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
 
 # ----- system prompt: this is where the "quality" lives -----
 SYSTEM_PROMPT = """\
-You are python_guru, a drill coach for Python3 coding-interview SYNTAX.
-The user is an experienced backend engineer (C#/Java background) prepping for
-AI-company interviews (OpenAI etc). They code interviews in Python but their
-syntax is rusty and they have failed interviews due to syntax fumbles, NOT
-algorithms. Your job: build their Python3 syntax muscle memory as fast as possible.
+You are python_guru, a one-question-at-a-time drill coach for Python3 interview syntax.
+The user is an experienced backend engineer (C#/Java background) whose Python syntax
+is rusty. Goal: build muscle memory fast, one question per turn.
 
 ⚠️ ACCURACY IS NON-NEGOTIABLE:
-- Every line of Python you write MUST be valid Python3. Zero exceptions.
-- When grading: if you are not 100% certain about correct syntax, say so and
-  look it up mentally step by step before writing the answer.
-- Common traps to avoid: Python has no `new` keyword; `list.sort()` returns None;
-  `sorted()` returns a new list; `deque.popleft()` not `dequeue()`; boolean
-  operators are `and/or/not` not `&&/||/!`; `range(0,10)` gives 0–9 not 1–9.
-- Never invent methods that don't exist in Python3 stdlib.
+- Every Python line you write MUST be valid Python3.
+- Traps: no `new` keyword; `list.sort()` returns None; `sorted()` returns new list;
+  use `and/or/not` not `&&/||/!`; `range(0,10)` is 0–9; `deque.popleft()` not `dequeue()`.
+- Never invent methods. When grading, verify step by step before writing the answer.
 
-RULES FOR GENERATING QUESTIONS (when asked to generate a practice set):
-- Output EXACTLY 5 short syntax questions. No complex algorithms — pure
-  syntax/API recall and tiny fill-in-the-blank or "what does this return?" snippets.
-- Mix: 3 questions target the user's known weak points (from the ERROR BOOK),
-  2 questions cover SYNTAX CURRICULUM topics with lowest "seen" count.
-- Number them 1-5. Keep each question one or two lines. Do NOT give answers yet.
-- After the 5 questions, output a fenced json block in this EXACT shape:
+FORMAT — use Telegram Markdown:
+- Wrap all Python code in backticks: `sorted(a, reverse=True)`
+- Multi-line code in triple backticks with python tag
+- Keep messages short and scannable
+
+GENERATING A QUESTION (when asked):
+Pick 1 topic — prefer the user's weak points (🔴 first, then 🟡), otherwise
+pick the least-covered curriculum topic. Output ONE short question (1–3 lines).
+Do NOT give the answer. End with a blank line then exactly:
 ```json
-{"covered_topics": ["dict_comprehension", "zip"], "suggest_topics": []}
+{"covered_topics": ["topic_id"], "suggest_topics": []}
 ```
-  - `covered_topics`: topic ids the 2 curriculum questions exercised.
-  - `suggest_topics`: 0–2 NEW topic ids (snake_case) not already in the
-    curriculum that you think are worth adding for interview prep. Include a
-    brief label separated by |, e.g. `"walrus_op|walrus operator := in conditions"`.
-    Only suggest topics you are 100% sure about. Leave empty list if unsure.
-  This block is parsed by the bot; the user does NOT see it.
-- End the user-visible part with: "答完发我，我来批改。"
+`suggest_topics`: 0–1 new topic id not in curriculum, format `"id|label"`. Only if 100% sure.
+The json block is stripped by the bot; user does not see it.
 
-RULES FOR GRADING (when the user replies with answers):
-- For each answer: say ✅ or ❌, show the VERIFIED correct Python3, and give a
-  one-line 记忆点 (memory hook). Be concise but complete. Reply in Chinese,
-  code in English.
-- At the VERY END of your grading reply, output a fenced json block (nothing after):
+GRADING (when the user sends an answer):
+Reply in this exact structure:
+Line 1: ✅ 正确 or ❌ 错误
+Line 2: 正确写法: `<correct python>`  (or a short code block if multi-line)
+Line 3: 记忆点: <one sharp Chinese sentence why this trips people up>
+
+Then on a new line, output the update block (stripped by bot, user does not see):
 ```json
-{"add_or_escalate": [{"point":"...","correct":"...","status":"🔴"}],
- "mastered": ["point text answered correctly"]}
+{"add_or_escalate": [{"point":"...","correct":"...","status":"🔴"}], "mastered": []}
 ```
-  `add_or_escalate`: errors to record or worsen. `mastered`: points answered
-  correctly that should be removed from the error book.
-  If nothing changes, output empty lists. The user does NOT see this block.
+If nothing to update, output empty lists. Nothing after the json block.
 
-TONE: direct, no fluff. The user values honest correction and speed.
+TONE: terse, honest, zero fluff.
 """
 
 
@@ -274,16 +265,46 @@ def split_grading_and_json(text: str):
     return text.strip(), None
 
 
+async def _send_question(chat_id: int, bot) -> str:
+    """Ask Claude for one question, update topic coverage, return raw reply."""
+    errors = load_errors()
+    topics = load_topics()
+    user_msg = (
+        "Give me one question now.\n\n"
+        + errors_as_text(errors)
+        + "\n\n"
+        + topics_as_text(topics)
+    )
+    messages = conversations.get(chat_id, []) + [{"role": "user", "content": user_msg}]
+    reply = await call_claude(messages, SYSTEM_PROMPT)
+
+    visible, meta = split_grading_and_json(reply)
+    if meta is not None:
+        topics = apply_coverage(topics, meta.get("covered_topics", []))
+        topics, added = apply_new_topics(topics, meta.get("suggest_topics", []))
+        save_topics(topics)
+        if added:
+            logger.info("Added new topics: %s", added)
+
+    conversations[chat_id] = [
+        {"role": "user", "content": user_msg},
+        {"role": "assistant", "content": reply},
+    ]
+    await bot.send_message(chat_id=chat_id, text=visible or reply, parse_mode="Markdown")
+    return reply
+
+
 # ----- handlers -----
 async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
     await update.message.reply_text(
-        "👋 python_guru 上线。\n"
-        "/practice 开始练 5 道\n"
-        "/errors 看错题本\n"
-        "/coverage 看语法覆盖进度\n"
-        "/reset 清空当前对话状态"
+        "👋 *python\\_guru* 上线\n\n"
+        "/practice — 开始练习（每次1题，答完自动下一题）\n"
+        "/errors — 看错题本\n"
+        "/coverage — 看语法覆盖进度\n"
+        "/stop — 停止当前练习",
+        parse_mode="Markdown",
     )
 
 
@@ -291,52 +312,41 @@ async def practice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
     chat_id = update.effective_chat.id
+    conversations.pop(chat_id, None)  # fresh session
     await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-
-    errors = load_errors()
-    topics = load_topics()
-    user_msg = (
-        "Generate a new practice set of 5 questions now.\n\n"
-        + errors_as_text(errors)
-        + "\n\n"
-        + topics_as_text(topics)
-    )
-    messages = [{"role": "user", "content": user_msg}]
-    reply = await call_claude(messages, SYSTEM_PROMPT)
-
-    visible, coverage = split_grading_and_json(reply)
-    if coverage is not None:
-        topics = apply_coverage(topics, coverage.get("covered_topics", []))
-        topics, added = apply_new_topics(topics, coverage.get("suggest_topics", []))
-        save_topics(topics)
-        if added:
-            logger.info("Added new topics to curriculum: %s", added)
-
-    # seed conversation so the next user message is graded with this set as context
-    conversations[chat_id] = [
-        {"role": "user", "content": user_msg},
-        {"role": "assistant", "content": reply},
-    ]
-    await update.message.reply_text(visible or reply)
+    await _send_question(chat_id, ctx.bot)
 
 
 async def errors_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
-    await update.message.reply_text(errors_as_text(load_errors()))
+    data = load_errors()
+    if not data["points"]:
+        text = "✅ 错题本是空的，继续加油！"
+    else:
+        lines = [f"{'🔴' if p['status']=='🔴' else '🟡'} *{p['point']}*\n  → `{p['correct']}`"
+                 for p in data["points"]]
+        text = "📕 *错题本*\n\n" + "\n\n".join(lines)
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 async def coverage_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
-    await update.message.reply_text(topics_as_text(load_topics()))
+    data = load_topics()
+    rows = sorted(data["topics"], key=lambda t: t["seen"])
+    lines = [f"`{t['id']}` {t['label']} （练了{t['seen']}次）" for t in rows]
+    await update.message.reply_text(
+        "📊 *语法覆盖进度*（从少到多）\n\n" + "\n".join(lines),
+        parse_mode="Markdown",
+    )
 
 
-async def reset(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def stop_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
     conversations.pop(update.effective_chat.id, None)
-    await update.message.reply_text("对话状态已清空（错题本保留）。/practice 重新开始。")
+    await update.message.reply_text("⏹ 练习已停止。/practice 随时重新开始。")
 
 
 async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -344,21 +354,23 @@ async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     chat_id = update.effective_chat.id
     if chat_id not in conversations:
-        await update.message.reply_text("先发 /practice 拿题目，再发答案。")
+        await update.message.reply_text("发 /practice 开始练习。")
         return
 
     await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-    conversations[chat_id].append(
-        {"role": "user", "content": update.message.text}
-    )
+    conversations[chat_id].append({"role": "user", "content": update.message.text})
     reply = await call_claude(conversations[chat_id], SYSTEM_PROMPT)
 
     visible, updates = split_grading_and_json(reply)
     if updates is not None:
         save_errors(apply_updates(load_errors(), updates))
-
     conversations[chat_id].append({"role": "assistant", "content": reply})
-    await update.message.reply_text(visible or "（已批改）")
+
+    await update.message.reply_text(visible or "（已批改）", parse_mode="Markdown")
+
+    # auto-send next question
+    await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
+    await _send_question(chat_id, ctx.bot)
 
 
 def main():
@@ -367,7 +379,7 @@ def main():
     app.add_handler(CommandHandler("practice", practice))
     app.add_handler(CommandHandler("errors", errors_cmd))
     app.add_handler(CommandHandler("coverage", coverage_cmd))
-    app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CommandHandler("stop", stop_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer))
     logger.info("python_guru is running (polling)...")
     app.run_polling()
