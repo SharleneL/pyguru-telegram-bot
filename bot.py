@@ -54,42 +54,49 @@ You are python_guru, a drill coach for Python3 coding-interview SYNTAX.
 The user is an experienced backend engineer (C#/Java background) prepping for
 AI-company interviews (OpenAI etc). They code interviews in Python but their
 syntax is rusty and they have failed interviews due to syntax fumbles, NOT
-algorithms. Your job: build their Python3 syntax muscle memory.
+algorithms. Your job: build their Python3 syntax muscle memory as fast as possible.
+
+⚠️ ACCURACY IS NON-NEGOTIABLE:
+- Every line of Python you write MUST be valid Python3. Zero exceptions.
+- When grading: if you are not 100% certain about correct syntax, say so and
+  look it up mentally step by step before writing the answer.
+- Common traps to avoid: Python has no `new` keyword; `list.sort()` returns None;
+  `sorted()` returns a new list; `deque.popleft()` not `dequeue()`; boolean
+  operators are `and/or/not` not `&&/||/!`; `range(0,10)` gives 0–9 not 1–9.
+- Never invent methods that don't exist in Python3 stdlib.
 
 RULES FOR GENERATING QUESTIONS (when asked to generate a practice set):
 - Output EXACTLY 5 short syntax questions. No complex algorithms — pure
-  syntax/API recall and tiny snippets.
-- Mix: 3 questions target the user's known weak points (from the ERROR BOOK
-  provided below), 2 questions cover common Python3 usage from the SYNTAX
-  CURRICULUM provided below — prefer topics marked as least-recently-covered
-  (lowest "seen" count). Do NOT repeat topics already heavily covered unless
-  they are also weak points.
+  syntax/API recall and tiny fill-in-the-blank or "what does this return?" snippets.
+- Mix: 3 questions target the user's known weak points (from the ERROR BOOK),
+  2 questions cover SYNTAX CURRICULUM topics with lowest "seen" count.
 - Number them 1-5. Keep each question one or two lines. Do NOT give answers yet.
-- After the 5 questions, output a fenced json block listing which curriculum
-  topic ids the 2 new-coverage questions exercised, in this exact shape:
+- After the 5 questions, output a fenced json block in this EXACT shape:
 ```json
-{"covered_topics": ["dict_comprehension", "zip"]}
+{"covered_topics": ["dict_comprehension", "zip"], "suggest_topics": []}
 ```
-  This block is parsed by the bot to track coverage; the user does NOT see it.
+  - `covered_topics`: topic ids the 2 curriculum questions exercised.
+  - `suggest_topics`: 0–2 NEW topic ids (snake_case) not already in the
+    curriculum that you think are worth adding for interview prep. Include a
+    brief label separated by |, e.g. `"walrus_op|walrus operator := in conditions"`.
+    Only suggest topics you are 100% sure about. Leave empty list if unsure.
+  This block is parsed by the bot; the user does NOT see it.
 - End the user-visible part with: "答完发我，我来批改。"
 
 RULES FOR GRADING (when the user replies with answers):
-- For each answer: say ✅ or ❌, show the correct Python, and give a one-line
-  记忆点 (memory hook). Be concise but complete. Reply in Chinese (the user's
-  language), code in English.
-- Identify which answers reveal errors that should be ADDED or ESCALATED in the
-  error book, and which weak points were answered correctly (candidates for
-  de-escalation).
-- At the VERY END of your grading reply, output a fenced json block with this
-  exact shape (and nothing after it):
+- For each answer: say ✅ or ❌, show the VERIFIED correct Python3, and give a
+  one-line 记忆点 (memory hook). Be concise but complete. Reply in Chinese,
+  code in English.
+- At the VERY END of your grading reply, output a fenced json block (nothing after):
 ```json
 {"add_or_escalate": [{"point":"...","correct":"...","status":"🔴"}],
- "mastered": ["point text that was answered correctly twice"]}
+ "mastered": ["point text answered correctly"]}
 ```
-  This block is parsed by the bot to update errors.json. If nothing changes,
-  output empty lists. The user does NOT see this block; it is stripped out.
+  `add_or_escalate`: errors to record or worsen. `mastered`: points answered
+  correctly that should be removed from the error book.
+  If nothing changes, output empty lists. The user does NOT see this block.
 
-TONE: direct, encouraging, no fluff. The user values honest correction.
+TONE: direct, no fluff. The user values honest correction and speed.
 """
 
 
@@ -120,26 +127,52 @@ def errors_as_text(data: dict) -> str:
 
 # ----- syntax curriculum persistence -----
 DEFAULT_TOPICS = [
-    ("dict_comprehension", "dict comprehension {k: v for ...}"),
-    ("list_comprehension", "list comprehension & conditional comprehension"),
-    ("zip", "zip() and zip(*) unpacking"),
-    ("enumerate", "enumerate(start=...)"),
-    ("sorted_key", "sorted(key=..., reverse=...) and list.sort"),
-    ("counter", "collections.Counter"),
-    ("defaultdict", "collections.defaultdict"),
-    ("unpacking", "tuple/list unpacking, *rest"),
-    ("fstrings", "f-strings & format specs"),
-    ("args_kwargs", "*args / **kwargs"),
-    ("negative_indexing", "negative indexing"),
-    ("slicing", "slicing a[start:stop:step]"),
+    # --- Collections & data structures ---
+    ("list_ops", "list: append/pop/pop(0)/insert/extend/remove/index/copy"),
+    ("list_comprehension", "list comprehension [x for x in a if cond]"),
+    ("dict_comprehension", "dict comprehension {k: v for k, v in items}"),
+    ("set_comprehension", "set comprehension {x for x in a}"),
+    ("slicing", "slicing a[start:stop:step], a[::-1] reversal"),
+    ("negative_indexing", "negative indexing a[-1] a[-2]"),
+    ("2d_list_init", "2D list init: [[0]*n for _ in range(m)] — NOT [[0]*n]*m"),
+    ("set_ops", "set: add/remove/discard, & | - ^ operators"),
+    ("dict_methods", "dict.get(k,default) / items() / keys() / values() / pop(k) / update()"),
+    ("defaultdict", "collections.defaultdict(int/list/set)"),
+    ("counter", "collections.Counter: most_common, arithmetic"),
+    ("deque", "collections.deque: append/appendleft/pop/popleft"),
+    ("heapq", "heapq: heappush/heappop/heapify; max-heap via negation -x"),
+    # --- Iteration patterns ---
+    ("enumerate", "enumerate(iterable, start=0) → (i, val)"),
+    ("zip", "zip(a, b) / zip(*matrix) for transpose / zip_longest"),
+    ("sorted_key", "sorted(iterable, key=..., reverse=True); list.sort() returns None"),
+    ("range_ops", "range(start, stop, step); range(n-1,-1,-1) for reverse"),
+    ("unpacking", "a, b = b, a; a, *rest = lst; _, x = pair"),
+    ("lambda_map_filter", "lambda x: x+1; map(fn, it); filter(fn, it); list() to consume"),
+    # --- String ---
+    ("string_methods", "str.split(sep)/join(lst)/strip()/replace()/startswith()/endswith()"),
+    ("ord_chr", "ord('a')=97; chr(97)='a'; ord(ch)-ord('a') for index"),
+    ("fstrings", "f'{val:.2f}', f'{val!r}', f'{val:>10}'"),
+    ("string_immutable", "strings are immutable; list(s) to mutate, ''.join(lst) back"),
+    # --- Control flow & operators ---
+    ("ternary", "x if cond else y  (no ?: operator)"),
+    ("boolean_ops", "and / or / not  (not && || !); short-circuit evaluation"),
+    ("walrus_op", "walrus := assigns and returns; e.g. while chunk := f.read(8192)"),
+    # --- Math & types ---
+    ("integer_ops", "a//b integer div; a%b modulo; a**b power; divmod(a,b)"),
+    ("infinity", "float('inf') / float('-inf'); use for sentinel values"),
+    ("type_convert", "int(s)/str(n)/float(s)/list(iterable)/set(lst)/tuple(lst)"),
+    ("abs_max_min", "abs(x); max(a,b)/min(a,b); max(lst,key=...); sum(lst)"),
+    # --- Functions & scope ---
+    ("args_kwargs", "*args (tuple) / **kwargs (dict) in function signature"),
+    ("multiple_return", "return a, b  →  x, y = func()  (returns a tuple)"),
+    ("nested_functions", "inner def captures outer variables (closure)"),
+    # --- Class basics ---
+    ("class_init", "__init__(self,...); no `new` keyword; self is explicit"),
+    # --- Misc patterns ---
     ("array_2d_init", "2D array init [[0]*n for _ in range(m)]"),
-    ("set_ops", "set operations & / | / - / ^"),
-    ("ternary", "ternary x if cond else y"),
-    ("dict_methods", "dict.get / setdefault / items"),
-    ("string_methods", "str.split / join / strip"),
-    ("heapq", "heapq push/pop/heapify"),
-    ("deque", "collections.deque"),
-    ("lambda_map_filter", "lambda, map, filter"),
+    ("stack_pattern", "stack = []; stack.append(x); stack.pop(); stack[-1] for peek"),
+    ("queue_pattern", "from collections import deque; q.append(x); q.popleft()"),
+    ("dict_default_pattern", "d[k] = d.get(k,0)+1  or  defaultdict(int)"),
 ]
 
 
@@ -169,6 +202,23 @@ def apply_coverage(data: dict, covered_ids: list) -> dict:
         if tid in by_id:
             by_id[tid]["seen"] = by_id[tid].get("seen", 0) + 1
     return data
+
+
+def apply_new_topics(data: dict, suggest_topics: list) -> tuple[dict, list]:
+    """Add Claude-suggested topics that don't already exist. Returns (data, added_labels)."""
+    existing_ids = {t["id"] for t in data["topics"]}
+    added = []
+    for entry in suggest_topics:
+        if "|" not in entry:
+            continue
+        tid, label = entry.split("|", 1)
+        tid = tid.strip()
+        label = label.strip()
+        if tid and tid not in existing_ids:
+            data["topics"].append({"id": tid, "label": label, "seen": 0})
+            existing_ids.add(tid)
+            added.append(label)
+    return data, added
 
 
 def apply_updates(data: dict, updates: dict) -> dict:
@@ -256,7 +306,11 @@ async def practice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     visible, coverage = split_grading_and_json(reply)
     if coverage is not None:
-        save_topics(apply_coverage(topics, coverage.get("covered_topics", [])))
+        topics = apply_coverage(topics, coverage.get("covered_topics", []))
+        topics, added = apply_new_topics(topics, coverage.get("suggest_topics", []))
+        save_topics(topics)
+        if added:
+            logger.info("Added new topics to curriculum: %s", added)
 
     # seed conversation so the next user message is graded with this set as context
     conversations[chat_id] = [
