@@ -230,9 +230,12 @@ def apply_updates(data: dict, updates: dict) -> dict:
     return data
 
 
+QUESTIONS_PER_SESSION = 5
+TRIGGER_PHRASES = {"test me", "考我", "出题", "练习", "quiz me", "practice"}
+
 # ----- in-memory conversation state (for grading context) -----
-# chat_id -> list of {"role","content"} messages since last /practice
-conversations: dict[int, list] = {}
+# chat_id -> {"messages": [...], "asked": int, "graded": int}
+conversations: dict[int, dict] = {}
 
 
 def _authorized(update: Update) -> bool:
@@ -265,17 +268,20 @@ def split_grading_and_json(text: str):
     return text.strip(), None
 
 
-async def _send_question(chat_id: int, bot) -> str:
-    """Ask Claude for one question, update topic coverage, return raw reply."""
+async def _send_question(chat_id: int, bot) -> None:
+    """Ask Claude for one question, update topic coverage, send to user."""
     errors = load_errors()
     topics = load_topics()
+    session = conversations[chat_id]
+    q_num = session["asked"] + 1
+
     user_msg = (
-        "Give me one question now.\n\n"
+        f"Give me question {q_num} of {QUESTIONS_PER_SESSION}.\n\n"
         + errors_as_text(errors)
         + "\n\n"
         + topics_as_text(topics)
     )
-    messages = conversations.get(chat_id, []) + [{"role": "user", "content": user_msg}]
+    messages = session["messages"] + [{"role": "user", "content": user_msg}]
     reply = await call_claude(messages, SYSTEM_PROMPT)
 
     visible, meta = split_grading_and_json(reply)
@@ -286,12 +292,11 @@ async def _send_question(chat_id: int, bot) -> str:
         if added:
             logger.info("Added new topics: %s", added)
 
-    conversations[chat_id] = [
-        {"role": "user", "content": user_msg},
-        {"role": "assistant", "content": reply},
-    ]
-    await bot.send_message(chat_id=chat_id, text=visible or reply, parse_mode="Markdown")
-    return reply
+    session["messages"] = messages + [{"role": "assistant", "content": reply}]
+    session["asked"] = q_num
+
+    header = f"*题 {q_num}/{QUESTIONS_PER_SESSION}*\n\n"
+    await bot.send_message(chat_id=chat_id, text=header + (visible or reply), parse_mode="Markdown")
 
 
 # ----- handlers -----
@@ -308,13 +313,16 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def _start_session(chat_id: int, bot) -> None:
+    conversations[chat_id] = {"messages": [], "asked": 0, "graded": 0}
+    await _send_question(chat_id, bot)
+
+
 async def practice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
-    chat_id = update.effective_chat.id
-    conversations.pop(chat_id, None)  # fresh session
-    await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-    await _send_question(chat_id, ctx.bot)
+    await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+    await _start_session(update.effective_chat.id, ctx.bot)
 
 
 async def errors_cmd(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -353,24 +361,46 @@ async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not _authorized(update):
         return
     chat_id = update.effective_chat.id
-    if chat_id not in conversations:
-        await update.message.reply_text("发 /practice 开始练习。")
+    text = update.message.text.strip()
+
+    # trigger phrase → start new session
+    if text.lower() in TRIGGER_PHRASES:
+        await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
+        await _start_session(chat_id, ctx.bot)
         return
 
+    if chat_id not in conversations:
+        await update.message.reply_text('发 /practice 或说 "test me" 开始练习。')
+        return
+
+    session = conversations[chat_id]
     await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-    conversations[chat_id].append({"role": "user", "content": update.message.text})
-    reply = await call_claude(conversations[chat_id], SYSTEM_PROMPT)
+    session["messages"].append({"role": "user", "content": text})
+    reply = await call_claude(session["messages"], SYSTEM_PROMPT)
 
     visible, updates = split_grading_and_json(reply)
     if updates is not None:
         save_errors(apply_updates(load_errors(), updates))
-    conversations[chat_id].append({"role": "assistant", "content": reply})
+    session["messages"].append({"role": "assistant", "content": reply})
+    session["graded"] += 1
 
     await update.message.reply_text(visible or "（已批改）", parse_mode="Markdown")
 
-    # auto-send next question
-    await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-    await _send_question(chat_id, ctx.bot)
+    if session["graded"] >= QUESTIONS_PER_SESSION:
+        # session complete
+        conversations.pop(chat_id, None)
+        data = load_errors()
+        red = sum(1 for p in data["points"] if p["status"] == "🔴")
+        yellow = sum(1 for p in data["points"] if p["status"] == "🟡")
+        await ctx.bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ *本轮结束！*\n\n错题本：🔴 {red} 个 · 🟡 {yellow} 个\n\n说 \"test me\" 继续练。",
+            parse_mode="Markdown",
+        )
+    else:
+        # auto-send next question
+        await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
+        await _send_question(chat_id, ctx.bot)
 
 
 def main():
