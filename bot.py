@@ -859,24 +859,27 @@ def pick_topic(mode: str, current_topic_id: str = None) -> str:
     if mode == "repeat" and current_topic_id:
         return current_topic_id
 
+    # only pick topics that have content defined
+    valid_topics = [t for t in topics_data["topics"] if t["id"] in TOPIC_CONTENT]
+    if not valid_topics:
+        valid_topics = topics_data["topics"]
+
     if mode == "weak":
         errors_data = load_errors()
         red = [p["point"].lower() for p in errors_data["points"] if p["status"] == "🔴"]
         yellow = [p["point"].lower() for p in errors_data["points"] if p["status"] == "🟡"]
         weak_words = red + yellow
         if weak_words:
-            for t in sorted(topics_data["topics"], key=lambda x: x["seen"]):
+            for t in sorted(valid_topics, key=lambda x: x["seen"]):
                 label_lower = t["label"].lower()
                 if any(w in label_lower or label_lower in w for w in weak_words):
                     return t["id"]
-        # fallback: least seen
-        return sorted(topics_data["topics"], key=lambda t: t["seen"])[0]["id"]
+        return sorted(valid_topics, key=lambda t: t["seen"])[0]["id"]
 
     # random: weighted toward least-seen
-    topics = topics_data["topics"]
-    max_seen = max(t["seen"] for t in topics) if topics else 0
-    weights = [max_seen - t["seen"] + 1 for t in topics]
-    return random.choices(topic_ids, weights=weights, k=1)[0]
+    max_seen = max(t["seen"] for t in valid_topics) if valid_topics else 0
+    weights = [max_seen - t["seen"] + 1 for t in valid_topics]
+    return random.choices([t["id"] for t in valid_topics], weights=weights, k=1)[0]
 
 def find_topic_by_query(query: str):
     """Fuzzy-match user query to a topic id. Returns None if no match."""
