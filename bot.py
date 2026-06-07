@@ -878,6 +878,26 @@ def pick_topic(mode: str, current_topic_id: str = None) -> str:
     weights = [max_seen - t["seen"] + 1 for t in topics]
     return random.choices(topic_ids, weights=weights, k=1)[0]
 
+def find_topic_by_query(query: str):
+    """Fuzzy-match user query to a topic id. Returns None if no match."""
+    query = query.lower().strip()
+    if not query:
+        return None
+    if query in TOPIC_CONTENT:
+        return query
+    for tid in TOPIC_CONTENT:
+        if query in tid or tid in query:
+            return tid
+    for tid, c in TOPIC_CONTENT.items():
+        if query in c["title"].lower():
+            return tid
+    for tid, c in TOPIC_CONTENT.items():
+        title_words = c["title"].lower().split()
+        if any(query in w or w in query for w in title_words):
+            return tid
+    return None
+
+
 # ── helpers ───────────────────────────────────────────────────────────────────
 def _authorized(update: Update) -> bool:
     if ALLOWED_CHAT_ID is None:
@@ -1028,10 +1048,16 @@ async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _handle_teach(chat_id, text, ctx.bot)
         return
 
-    # trigger phrases → new random session
-    if text.lower() in TRIGGER_PHRASES:
+    # trigger phrases → new session (optionally with specific topic)
+    text_lower = text.lower()
+    if text_lower in TRIGGER_PHRASES or text_lower.startswith("test me "):
         await ctx.bot.send_chat_action(chat_id=chat_id, action="typing")
-        await _start_session(chat_id, ctx.bot, "random")
+        topic_query = text_lower.replace("test me", "").strip()
+        specific_topic = find_topic_by_query(topic_query) if topic_query else None
+        if specific_topic:
+            await _start_session(chat_id, ctx.bot, "repeat", specific_topic)
+        else:
+            await _start_session(chat_id, ctx.bot, "random")
         return
 
     # no active session
@@ -1051,9 +1077,16 @@ async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await _start_session(chat_id, ctx.bot, "weak")
         elif choice == "3":
             await _start_session(chat_id, ctx.bot, "repeat", current_topic)
+        elif text.lower().startswith("test me "):
+            topic_query = text.lower().replace("test me", "").strip()
+            specific_topic = find_topic_by_query(topic_query)
+            if specific_topic:
+                await _start_session(chat_id, ctx.bot, "repeat", specific_topic)
+            else:
+                await ctx.bot.send_message(chat_id=chat_id, text="找不到这个考点，回复 1/2/3 或说 test me <考点名>")
         else:
             await ctx.bot.send_message(chat_id=chat_id,
-                text="请回复 1、2 或 3\n\n1️⃣ 随机出题\n2️⃣ 常错考点\n3️⃣ 继续当前考点")
+                text="请回复 1、2 或 3，或说 test me <考点名>")
         return
 
     # side question mid-quiz
