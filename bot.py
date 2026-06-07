@@ -910,14 +910,14 @@ def split_grading_and_json(text: str):
     return text.strip(), None
 
 # ── session ───────────────────────────────────────────────────────────────────
-conversations: dict[int, dict] = {}
+conversations = {}  # type: dict
 
 AFTER_ROUND_MSG = (
     "\n\n选择下一步：\n"
     "1️⃣  随机出题\n"
     "2️⃣  常错考点\n"
     "3️⃣  继续当前考点\n\n"
-    "回复 1 / 2 / 3，或说 "test me""
+    "回复 1 / 2 / 3，或说 test me"
 )
 
 async def _send_question(chat_id: int, bot) -> None:
