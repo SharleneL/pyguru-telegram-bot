@@ -118,52 +118,36 @@ def errors_as_text(data: dict) -> str:
 
 # ----- syntax curriculum persistence -----
 DEFAULT_TOPICS = [
-    # --- Collections & data structures ---
-    ("list_ops", "list: append/pop/pop(0)/insert/extend/remove/index/copy"),
-    ("list_comprehension", "list comprehension [x for x in a if cond]"),
-    ("dict_comprehension", "dict comprehension {k: v for k, v in items}"),
-    ("set_comprehension", "set comprehension {x for x in a}"),
-    ("slicing", "slicing a[start:stop:step], a[::-1] reversal"),
-    ("negative_indexing", "negative indexing a[-1] a[-2]"),
-    ("2d_list_init", "2D list init: [[0]*n for _ in range(m)] — NOT [[0]*n]*m"),
-    ("set_ops", "set: add/remove/discard, & | - ^ operators"),
-    ("dict_methods", "dict.get(k,default) / items() / keys() / values() / pop(k) / update()"),
-    ("defaultdict", "collections.defaultdict(int/list/set)"),
-    ("counter", "collections.Counter: most_common, arithmetic"),
-    ("deque", "collections.deque: append/appendleft/pop/popleft"),
-    ("heapq", "heapq: heappush/heappop/heapify; max-heap via negation -x"),
-    # --- Iteration patterns ---
-    ("enumerate", "enumerate(iterable, start=0) → (i, val)"),
-    ("zip", "zip(a, b) / zip(*matrix) for transpose / zip_longest"),
-    ("sorted_key", "sorted(iterable, key=..., reverse=True); list.sort() returns None"),
-    ("range_ops", "range(start, stop, step); range(n-1,-1,-1) for reverse"),
-    ("unpacking", "a, b = b, a; a, *rest = lst; _, x = pair"),
-    ("lambda_map_filter", "lambda x: x+1; map(fn, it); filter(fn, it); list() to consume"),
+    # --- List ---
+    ("list_basics", "list: append/pop/pop(0)/in/len/index"),
+    ("list_slice", "slice: a[2:4] 左闭右开; a[2:-1]; a[::-1] 反转"),
+    ("list_sort", "sorted(a) 返回新list; a.sort(reverse=True) 原地返回None"),
+    ("list_comprehension", "[x for x in a if cond]"),
+    ("list_modify", "insert(i,x)/extend(lst)/remove(x)/copy()/clear()"),
+    # --- Stack / Queue / Heap ---
+    ("stack_pattern", "list as stack: append/pop/[-1] peek"),
+    ("deque_queue", "from collections import deque; append/popleft"),
+    ("heapq", "heappush/heappop/heapify/nlargest/nsmallest; max-heap 用 -x"),
+    # --- Dict ---
+    ("dict_basics", "d[k]=v; get(k,default); k in d; pop(k); update({k:v}); clear()"),
+    ("dict_iterate", "for k,v in d.items(); d.keys(); d.values()"),
+    ("defaultdict", "defaultdict(int) 默认0; defaultdict(list) 默认[]"),
+    # --- Set ---
+    ("set_basics", "set(); add/remove/in; set([1,2]); set('AaBBB')"),
+    # --- Number / Math ---
+    ("number_ops", "3/2=1.5; 3//2=1 整除; 3%2=1; 2**3=8; int(2.6)=2"),
+    ("math_funcs", "abs/max/min/pow; float('inf')/float('-inf')"),
     # --- String ---
-    ("string_methods", "str.split(sep)/join(lst)/strip()/replace()/startswith()/endswith()"),
-    ("ord_chr", "ord('a')=97; chr(97)='a'; ord(ch)-ord('a') for index"),
-    ("fstrings", "f'{val:.2f}', f'{val!r}', f'{val:>10}'"),
-    ("string_immutable", "strings are immutable; list(s) to mutate, ''.join(lst) back"),
-    # --- Control flow & operators ---
-    ("ternary", "x if cond else y  (no ?: operator)"),
-    ("boolean_ops", "and / or / not  (not && || !); short-circuit evaluation"),
-    ("walrus_op", "walrus := assigns and returns; e.g. while chunk := f.read(8192)"),
-    # --- Math & types ---
-    ("integer_ops", "a//b integer div; a%b modulo; a**b power; divmod(a,b)"),
-    ("infinity", "float('inf') / float('-inf'); use for sentinel values"),
-    ("type_convert", "int(s)/str(n)/float(s)/list(iterable)/set(lst)/tuple(lst)"),
-    ("abs_max_min", "abs(x); max(a,b)/min(a,b); max(lst,key=...); sum(lst)"),
-    # --- Functions & scope ---
-    ("args_kwargs", "*args (tuple) / **kwargs (dict) in function signature"),
-    ("multiple_return", "return a, b  →  x, y = func()  (returns a tuple)"),
-    ("nested_functions", "inner def captures outer variables (closure)"),
-    # --- Class basics ---
-    ("class_init", "__init__(self,...); no `new` keyword; self is explicit"),
-    # --- Misc patterns ---
-    ("array_2d_init", "2D array init [[0]*n for _ in range(m)]"),
-    ("stack_pattern", "stack = []; stack.append(x); stack.pop(); stack[-1] for peek"),
-    ("queue_pattern", "from collections import deque; q.append(x); q.popleft()"),
-    ("dict_default_pattern", "d[k] = d.get(k,0)+1  or  defaultdict(int)"),
+    ("ord_chr", "ord('a')=97; chr(97)='a'; ord(ch)-ord('a') 得index"),
+    # --- Logic / Control ---
+    ("boolean_ops", "and/or/not（不是&&/||/!）; True/False; bool([])=False"),
+    ("ternary", "x if cond else y（没有?:运算符）"),
+    ("range_ops", "range(0,10) 是0-9; range(3,-1,-1) 倒序3,2,1,0"),
+    # --- Functions ---
+    ("multiple_return", "return a,b,c → x,y,z = func()"),
+    # --- Class ---
+    ("class_init", "__init__(self,...); 没有new关键字; p = Person("John", 36)"),
+    ("helper_methods", "inner def 递归不用self; sibling method 用self.method()"),
 ]
 
 
