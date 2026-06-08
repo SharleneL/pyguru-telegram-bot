@@ -597,6 +597,38 @@ TOPIC_CONTENT = {
             "```"
         ),
     },
+    "fstrings": {
+        "title": "f-string 格式化",
+        "review": (
+            "```python\n"
+            "name = 'Alice'; score = 95.678\n"
+            "f'{name}'           # 'Alice'\n"
+            "f'{score:.2f}'      # '95.68'  2位小数\n"
+            "f'{score:.0f}'      # '96'     整数\n"
+            "f'{42:>10}'         # '        42' 右对齐\n"
+            "f'{42:05}'          # '00042'  补零\n"
+            "```"
+        ),
+        "teach": (
+            "📖 *f-string 格式化*\n\n"
+            "```python\n"
+            "f'{name}'        # 变量\n"
+            "f'{score:.2f}'   # '95.68' 2位小数\n"
+            "f'{score:.0f}'   # '96' 四舍五入\n"
+            "f'{42:>10}'      # '        42' 右对齐\n"
+            "f'{42:<10}'      # '42        ' 左对齐\n"
+            "f'{42:05}'       # '00042' 补零\n"
+            "f'{2+2}'         # '4' 表达式\n"
+            "```\n\n"
+            "⚠️ *易错点*\n"
+            "```python\n"
+            "# ❌ 旧写法\n"
+            "'Hello %s' % name\n"
+            "# ✅\n"
+            "f'Hello {name}'\n"
+            "```"
+        ),
+    },
     "ternary": {
         "title": "三元表达式",
         "review": (
@@ -771,6 +803,7 @@ DEFAULT_TOPICS = [
     ("math_funcs",         "abs/max/min/sum/pow; float('inf')/float('-inf')"),
     ("ord_chr",            "ord('a')=97; chr(97)='a'; ord(ch)-ord('a') 得index"),
     ("boolean_ops",        "and/or/not（不是&&/||/!）; True/False; bool([])=False"),
+    ("fstrings",           "f-string formatting: f-string format specs"),
     ("ternary",            "x if cond else y（没有?:运算符）"),
     ("range_ops",          "range(0,10) 是0-9; range(3,-1,-1) 倒序3,2,1,0"),
     ("multiple_return",    "return a,b,c → x,y,z = func(); a,b=b,a 交换"),
@@ -886,17 +919,23 @@ def find_topic_by_query(query: str):
     query = query.lower().strip()
     if not query:
         return None
+    def norm(s):
+        return s.lower().replace("-", "").replace("_", "").replace(" ", "")
+    q = norm(query)
     if query in TOPIC_CONTENT:
         return query
+    # normalised id match (fstring -> fstrings, f-string -> fstrings)
     for tid in TOPIC_CONTENT:
-        if query in tid or tid in query:
+        if q in norm(tid) or norm(tid) in q:
             return tid
+    # normalised title match
     for tid, c in TOPIC_CONTENT.items():
-        if query in c["title"].lower():
+        if q in norm(c["title"]):
             return tid
+    # word overlap
     for tid, c in TOPIC_CONTENT.items():
-        title_words = c["title"].lower().split()
-        if any(query in w or w in query for w in title_words):
+        words = [norm(w) for w in c["title"].lower().split()]
+        if any(q in w or w in q for w in words):
             return tid
     return None
 
