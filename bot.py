@@ -72,7 +72,7 @@ TOPIC_COMPLEXITY = {
     "list_modify": 4, "stack_pattern": 3, "deque_queue": 4, "heapq": 6,
     "dict_basics": 5, "dict_iterate": 3, "defaultdict": 3, "set_basics": 3,
     "number_ops": 4, "math_funcs": 3, "ord_chr": 3, "boolean_ops": 3,
-    "ternary": 2, "range_ops": 3, "multiple_return": 3, "class_init": 4,
+    "ternary": 2, "fstrings": 3, "range_ops": 3, "multiple_return": 3, "class_init": 4,
     "helper_methods": 4,
 }
 
@@ -1059,6 +1059,10 @@ async def handle_answer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         specific_topic = find_topic_by_query(topic_query) if topic_query else None
         if specific_topic:
             await _start_session(chat_id, ctx.bot, "repeat", specific_topic)
+        elif topic_query:
+            topic_list = " / ".join(TOPIC_CONTENT.keys())
+            await ctx.bot.send_message(chat_id=chat_id,
+                text=f"找不到考点 '{topic_query}'。\n\n可用考点：\n{topic_list}")
         else:
             await _start_session(chat_id, ctx.bot, "random")
         return
